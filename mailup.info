@@ -1,0 +1,9 @@
+name = MailUp
+description = Modulo per l'invio delle newsletter
+package = PomilioModules
+
+core = 7.x
+
+;files[] = FILE DA INCLUDERE
+
+configure = admin/config/services/mailup

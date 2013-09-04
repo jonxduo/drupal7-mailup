@@ -1,0 +1,80 @@
+<?php
+
+/**
+ * Implements hook_schema().
+ */
+function mailup_schema() {
+	$schema = array();
+
+	$schema['mailup_data'] = array(
+		'description' => 'The base table for mailup.',
+		'fields' => array(
+			'mailup_id'=>array(
+				'description' => 'Primary key of the basic entity.',
+				'type' => 'serial',
+				'unsigned' => TRUE,
+				'not null' => TRUE,
+			),
+			'mailup_group'=>array(
+				'description' => 'mailup group',
+				'type' => 'varchar',
+				'length' => 255,
+				'not null' => TRUE,
+				'default' => '',
+			),
+			'mailup_subject'=>array(
+				'description' => 'mail subject',
+				'type' => 'varchar',
+				'length' => 255,
+				'not null' => FALSE,
+				'default' => '',
+			),
+			'mailup_newsletter_id'=>array(
+				'description' => 'newsletter id',
+				'type' => 'varchar',
+				'length' => 255,
+				'not null' => FALSE,
+				'default' => '',
+			),
+			'mailup_nid'=>array(
+				'description' => 'node id',
+				'type' => 'varchar',
+				'length' => 255,
+				'not null' => FALSE,
+				'default' => '',
+			),
+		),
+		'primary key' => array('mailup_id'),
+	);
+
+	$schema['mailup_blocks'] = array(
+		'description' => 'The bloks table for mailup.',
+		'fields' => array(
+			'mailup_block_id'=>array(
+				'description' => 'Primary key of the basic entity.',
+				'type' => 'serial',
+				'unsigned' => TRUE,
+				'not null' => TRUE,
+			),
+			'mailup_group'=>array(
+				'description' => 'mailup group',
+				'type' => 'varchar',
+				'length' => 255,
+				'not null' => TRUE,
+				'default' => '',
+			),
+			'mailup_info'=>array(
+				'description' => 'info',
+				'type' => 'varchar',
+				'length' => 255,
+				'not null' => TRUE,
+				'default' => '',
+			),
+		),
+		'primary key' => array('mailup_block_id'),
+	);
+
+	return $schema;
+}
+
+?>

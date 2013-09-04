@@ -1,0 +1,630 @@
+<?php
+
+module_load_include('inc', 'mailup', 'mailup');
+
+
+/**
+ * Implements hook_help.
+ *
+ * Displays help and module information.
+ *
+ * @param path
+ *   Restituisce la path corrente
+ * @param arg
+ *   Array che contiene il percorso corrente per arg() function
+ */
+function mailup_help ( $path , $arg ) {
+	switch ( $path ) {
+		case "admin/help#mailup" :
+		return '<p>' . t ( "Modulo per l'iscrizione e la gestione delle newsletter" ) . '</p>' ;
+		case "admin/config/services/mailup" :
+        return '<p>' . t ( "Configurazione mailup" ) . '</p>' ;
+        break;
+    }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function mailup_menu(){
+    $items = array();
+
+    $items['admin/config/services/mailup'] = array(
+        'title' => 'mailup',
+        'description' => 'Configurazione di mailup',
+        'page callback' => 'mailup_config_form_page',
+        //'page callback' => 'drupal_get_form',
+        //'page arguments' => array('mailup_config_form'),
+        'access arguments' => array('access administration pages'),
+        'type' => MENU_NORMAL_ITEM,
+    );
+
+    $items['admin/config/services/mailup/block/new'] = array(
+        'title' => 'Nuovo blocco',
+        'description' => 'Configurazione di un nuovo blocco mailup',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('mailup_new_block_form'),
+        'access arguments' => array('access administration pages'),
+        'type' => MENU_LOCAL_ACTION,
+    );
+
+    $items['admin/config/services/mailup/block/%/edit'] = array(
+        'title' => 'mailup nuovo blocco',
+        'description' => 'Configurazione di un nuovo blocco mailup',
+        'page callback' => 'drupal_get_form',
+        'page arguments' => array('mailup_new_block_form', 5),
+        'access arguments' => array('access administration pages'),
+        'type' => MENU_NORMAL_ITEM,
+    );
+
+    $items['admin/config/services/mailup/block/%/delete'] = array(
+      'title' => 'Delete block',
+      'description' => t('Delete this block?'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('mailup_block_delete', 5),
+      'access arguments' => array('access administration pages'),
+      'type' => MENU_NORMAL_ITEM,
+    );
+
+    return $items;
+}
+
+function mailup_config_form_page(){
+    $form=drupal_get_form('mailup_config_form');
+
+    $blocks=array();
+    $db_blocks=mailup_getInfo_blocks();
+    $table='';
+
+    if($db_blocks!=false){
+        $table='<h2>Mailup Blocks</h2><table><thead><tr><th>id</th><th>Name</th><th>Gruppo</th><th>Actions</th></tr></thead><tbody>';
+        foreach ($db_blocks as $e){
+          $table.='<tr><td>'.$e['mailup_block_id'].'</td><td>'.$e['mailup_info'].'</td><td>'.$e['mailup_group'].'</td><td><ul><li><a href="?q=admin/config/services/mailup/block/'.$e['mailup_block_id'].'/edit">Modifica</a></li><li><a href="?q=admin/config/services/mailup/block/'.$e['mailup_block_id'].'/delete">Elimina</a></li></td></tr>';
+        }
+
+        $table.='</tbody></table>';
+    }
+
+    return $table.'<h2>Mailup Config</h2>'.drupal_render($form);
+}
+
+function mailup_config_form(){   
+    $form['mailup_username'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Username'),
+        '#default_value' => variable_get('mailup_username'),
+        '#description' => t('Mailup web service username '),
+        '#required' => TRUE,
+    );
+
+    $form['mailup_password'] = array(
+        '#type' => 'password',
+        '#title' => t('Password'),
+        '#default_value' => variable_get('mailup_password'),
+        '#description' => t('Mailup web service password'),
+        '#required' => TRUE,
+    );
+
+    $form['mailup_console_url'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Console URL'),
+        '#default_value' => variable_get('mailup_console_url'),
+        '#description' => t('Mailup console URL'),
+        '#required' => TRUE,
+    );
+
+    $form['mailup_console_id'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Console Id'),
+        '#default_value' => variable_get('mailup_console_id'),
+        '#description' => t('Mailup console Id '),
+        '#required' => TRUE,
+    );
+
+    $form['mailup_type_content'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Content Type'),
+        '#default_value' => variable_get('mailup_type_content'),
+        '#description' => t('Nome del tipo di contenuto da filtrare'),
+        '#required' => TRUE,
+    );
+
+    $form['mailup_mail_type'] = array(
+        '#type' => 'select',
+        '#title' => t('Mail type'),
+        '#default_value' => variable_get('mailup_mail_type'),
+        '#description' => t('Mail type'),
+        '#options'=>array(
+            'node'=>'Rendered node',
+            'body'=>'Rendered also node body',
+            'url'=>'Node url'
+        ),
+        '#required' => TRUE,
+    );
+
+    
+
+    $ctrl=variable_get('mailup_username');
+
+    if($ctrl!=NULL){
+        $mailup_lists=mailup_exec('GetLists');
+    
+        $list_options=array();
+        foreach ($mailup_lists as $v){
+            $list_options[$v['id']]=$v['name'];
+        };
+
+        $form['mailup_list_id'] = array(
+            '#type' => 'select',
+            '#title' => t('Lista'),
+            '#description' => t('Lista a cui inviare la newsletter (se non viene caricato l\'elenco delle liste, salvare le impostazioni e riprovare)'),
+            '#options'=>$list_options,
+            '#default_value' => variable_get('mailup_list_id'),
+            '#required' => TRUE,
+        );
+    }
+
+    return system_settings_form($form);
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function mailup_menu_alter(&$items) {
+    $items['node/%node/mailup/edit'] = array(
+        'title' => 'Invia',
+        'description' => 'Invia la newsletter con mailup',
+        'page callback' => 'mailup_newsletter_page',
+        'page arguments' => array(1),
+        'access callback' => 'mailup_access_check',
+        'access arguments' => array(1),
+        'weight' => 0,
+        'type' => MENU_LOCAL_TASK,
+    );
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function mailup_form_alter(&$form, $form_state, $form_id){
+    $nodeTypes=mailup_getTypes(variable_get('mailup_type_content'));
+    if(count($nodeTypes)){
+        foreach($nodeTypes as $nt){
+            if(isset($form['#node'])){
+                $node = $form['#node'];
+                // se si sta creando un nuovo nodo, reindirizza alla pagina per l'invio
+                if (empty($node->nid) && $node->type==$nt) {
+                  $form['actions']['submit']['#submit'][] = 'mailup_form_submit';
+                }
+            }
+        }
+    }
+}
+
+function mailup_form_submit($form, &$form_state) {
+  drupal_set_message(t('Se si desidera si può procedere con l\'invio'));
+  $form_state['redirect'] = 'node/'.$form_state['nid'].'/mailup/edit';
+}
+
+function mailup_access_check($node){
+    $nodeTypes= mailup_getTypes(variable_get('mailup_type_content'));
+    if(count($nodeTypes)){
+        foreach ($nodeTypes as $nt){
+            if ($node->type == $nt) {
+                return TRUE;
+            }
+        }
+    }
+    return FALSE;
+}
+
+function mailup_getTypes ($str){
+    $array=explode(', ', $str);
+    return $array;
+}
+
+function mailup_newsletter_page($arguments){
+    global $base_url;
+    $mailUrl='?q=node/'.$arguments->vid;
+    $mailContent=file_get_contents($base_url.'/'.$mailUrl);
+
+    $form=drupal_get_form('mailup_create_mail_form', $arguments->nid);
+
+    $form['actions']['submit']['#value'] = 'Invia';
+
+    //debug($form);
+
+    return drupal_render($form);
+}
+
+function mailup_create_mail_form($form, &$form_state, $nid){
+    //debug($nid);
+    $mailup_group='';
+    $mailup_subject='';
+    $newsletter_id='';
+    $default=mailup_getInfo_data($nid);
+
+    if($default!=false){
+        //debug($default);
+        $mailup_group=$default[0]['mailup_group'];
+        $mailup_subject=$default[0]['mailup_subject'];
+        $newsletter_id=$default[0]['mailup_newsletter_id'];
+        $form['#submit'][]='mailup_update_mail_form_submit';
+    }else{
+        $form['#submit'][]='mailup_create_mail_form_submit';
+    }
+
+    $mailup_list_id=variable_get('mailup_list_id');
+    $mailup_lists=mailup_exec('GetListsAndGroups');
+    foreach($mailup_lists as $v){
+        if($v['id']==$mailup_list_id){
+            $mailup_groups=$v['groups'];
+        }
+    }
+    $mailup_groups_list=array();
+    foreach($mailup_groups as $v){
+        $mailup_groups_list[$v['id']]=$v['name'];
+    }
+
+    $form['mailup_group'] = array(
+        '#type' => 'select',
+        '#title' => t('Gruppo'),
+        '#description' => t('Gruppo a cui inviare la newsletter'),
+        '#options'=>$mailup_groups_list,
+        '#default_value' => $mailup_group,
+        '#required' => TRUE,
+    );
+
+    $form['mailup_subject'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Oggetto'),
+        '#description' => t('Ogetto della newsletter'),
+        '#default_value' => $mailup_subject,
+        '#required' => TRUE,
+    );
+
+    $form['mailup_nid'] = array(
+        '#type' => 'hidden',
+        '#default_value' => $nid
+    );
+
+    $form['mailup_newsletter_id'] = array(
+        '#type' => 'hidden',
+        '#default_value' => $newsletter_id
+    );
+
+    $form['actions']['save'] = array(
+        '#type' => 'submit',
+        '#value' => 'Salva ma non inviare'
+    );
+
+    return system_settings_form($form);
+}
+
+function mailup_create_mail_form_submit($form, &$form_state){ 
+    $params=array(
+        'listID' => variable_get('mailup_list_id'),
+        'subject' => $form_state['input']['mailup_subject'],
+        'type' => mailup_getType(),
+        'content' => mailup_getContent($form_state['input']['mailup_nid']),
+        'options' => array()
+    );
+
+    $test=mailup_exec('CreateNewsletter', $params);
+
+    $sql= "INSERT into {mailup_data} (mailup_id, mailup_group, mailup_subject, mailup_newsletter_id, mailup_nid)VALUES(0, '".$form_state['input']['mailup_group']."', '".$form_state['input']['mailup_subject']."', '".$test['newsletterID']."', '".$form_state['input']['mailup_nid']."')";
+    db_query($sql);
+
+    if($form_state['input']['op']=='Invia'){
+        $send_params=array(
+            'listID' => variable_get('mailup_list_id'),
+            'newsletterID' => $test['newsletterID'],
+            'groupID' => $form_state['input']['mailup_group']
+        );
+
+        $test2=mailup_exec('SendNewsletter', $send_params);
+
+        drupal_set_message(t('Newsletter inviata con successo'));
+    }
+}
+
+function mailup_update_mail_form_submit($form, &$form_state){
+   $params=array(
+        'listID' => variable_get('mailup_list_id'),
+        'newsletterID' => $form_state['input']['mailup_newsletter_id'],
+        'subject' => $form_state['input']['mailup_subject'],
+        'type' => mailup_getType(),
+        'content' => mailup_getContent($form_state['input']['mailup_nid']),
+        'options' => array()
+    );
+
+    $test=mailup_exec('CreateNewsletter', $params);
+
+    $sql="UPDATE {mailup_data} SET 
+        mailup_group='".$form_state['input']['mailup_group']."',
+        mailup_subject='".$form_state['input']['mailup_subject']."',
+        mailup_newsletter_id='".$form_state['input']['mailup_newsletter_id']."'
+        WHERE mailup_nid=".$form_state['input']['mailup_nid'];
+    db_query($sql);
+
+    if($form_state['input']['op']=='Invia'){
+        $send_params=array(
+            'listID' => variable_get('mailup_list_id'),
+            'newsletterID' => $test['newsletterID'],
+            'groupID' => $form_state['input']['mailup_group']
+        );
+
+        $test2=mailup_exec('SendNewsletter', $send_params);
+
+        drupal_set_message(t('Newsletter inviata con successo'));
+    }
+}
+
+/** creazione blocchi **/
+function mailup_new_block_form($form, &$form_state, $mailup_block_id=NULL){
+
+    $mailup_group='';
+    $mailup_info='';
+    $default=false;
+    if(isset($mailup_block_id)){$default=mailup_getInfo_blocks_byid($mailup_block_id);}
+
+    if($default!=false){
+        $mailup_group=$default[0]['mailup_group'];
+        $mailup_info=$default[0]['mailup_info'];
+        $form['#submit'][]='mailup_update_block_form_submit';
+    }else{
+        $form['#submit'][]='mailup_new_block_form_submit';
+    }
+
+    $mailup_list_id=variable_get('mailup_list_id');
+    $mailup_lists=mailup_exec('GetListsAndGroups');
+    foreach($mailup_lists as $v){
+        if($v['id']==$mailup_list_id){
+            $mailup_groups=$v['groups'];
+        }
+    }
+    $mailup_groups_list=array();
+    foreach($mailup_groups as $v){
+        $mailup_groups_list[$v['id']]=$v['name'];
+    }
+
+    $form['mailup_info'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Name'),
+        '#description' => t('Denominazione del blocco'),
+        '#default_value' => $mailup_info,
+        '#required' => TRUE,
+    );
+
+    $form['mailup_group'] = array(
+        '#type' => 'select',
+        '#title' => t('Gruppo'),
+        '#description' => t('Gruppo a cui inviare la newsletter'),
+        '#options'=>$mailup_groups_list,
+        '#default_value' => $mailup_group,
+        '#required' => TRUE,
+    );
+
+    if(isset($mailup_block_id)){
+        $form['mailup_block_id'] = array(
+            '#type' => 'hidden',
+            '#default_value' => $mailup_block_id
+        );
+    }
+
+    return system_settings_form($form);
+}
+
+
+function mailup_new_block_form_submit($form, &$form_state){
+    $sql= "INSERT into {mailup_blocks} (mailup_block_id, mailup_group, mailup_info)VALUES(0, '".$form_state['input']['mailup_group']."', '".$form_state['input']['mailup_info']."')";
+    db_query($sql);
+}
+
+function mailup_update_block_form_submit($form, &$form_state){
+    $sql="UPDATE {mailup_blocks} SET 
+        mailup_group='".$form_state['input']['mailup_group']."',
+        mailup_info='".$form_state['input']['mailup_info']."'
+        WHERE mailup_block_id=".$form_state['input']['mailup_block_id'];
+    db_query($sql);
+}
+
+function mailup_block_delete($form, &$form_state, $mailup_block_id) {
+    $form['mailup_block_id'] = array(
+        '#type'=>'hidden',
+        '#default_value'=>$mailup_block_id
+    );
+    $form['#submit'] = array('mailup_delete_submit');
+
+    return system_settings_form($form);
+}
+
+function mailup_delete_submit($form, &$form_state){
+    $mailup_block_id=$form_state['input']['mailup_block_id'];
+    $sql='DELETE FROM {mailup_blocks} WHERE mailup_block_id = '.$mailup_block_id;
+    db_query($sql);
+    $form_state['redirect']='admin/config/services/mailup';
+}
+
+/**
+* mail block info
+*/ 
+function mailup_block_info(){
+    $blocks=array();
+    $db_blocks=mailup_getInfo_blocks();
+
+    if($db_blocks != false){
+        foreach($db_blocks as $v){
+            $blocks[$v['mailup_block_id']] = array(
+                'info'=>$v['mailup_info'],
+                'cache' => DRUPAL_CACHE_PER_ROLE 
+            );
+        }
+    }
+    
+    return $blocks ;
+}
+
+function mailup_block_view ($delta = '') {
+    //debug($delta);
+    $data=mailup_getInfo_blocks_byid($delta);
+
+    $block['subject']=$data[0]['mailup_info'];
+    $block ['content']=mailup_block_base($data[0]['mailup_group']);
+    return $block ;
+}
+
+function mailup_block_base($mailup_group){
+    $html='<script language="JavaScript" type="text/JavaScript">'
+      .'function isEmail(strEmail){'
+        .'validRegExp = /^([\w-]+(?:\.[\w-]+)*)@((?:[\w-]+\.)*\w[\w-]{0,66})\.([a-z]{2,6}(?:\.[a-z]{2})?)$/i;'
+        .'if (strEmail.search(validRegExp) == -1) {'
+          .'alert(\'Inserire un indirizzo email valido\');'
+          .'return false;'
+        .'}'
+        .'return true;'
+      .'}'
+    .'</script>'
+
+    .'<form class="mailupForm" action="'.variable_get('mailup_console_url').'/frontend/subscribe.aspx" method="post" name="myForm">'
+      .'<fieldset>'
+        .'<label>La tua email: </label><input name="email" type="text" placeholder="Inserisci la tua mail">'
+        .'<input type="hidden" name="list" value="'.variable_get('mailup_list_id').'">'
+        .'<input type="hidden" name="group" value="'.$mailup_group.'">'
+        .'<input name="Submit" type="Submit" onClick="return isEmail(document.myForm.email.value);" value="Iscriviti">'
+      .'</fieldset>'
+    .'</form>';
+
+    return $html;
+
+}
+
+
+
+
+/*** ***/
+
+function mailup_getInfo_data($nid){
+  $sql = db_select('mailup_data', 'm')->fields('m');
+  $sql->condition('mailup_nid', $nid);
+  $result = $sql->execute();
+  $out=array();
+  while($record = $result->fetchAssoc()) {
+    $out[]=$record;
+  }
+  if(count($out)) return $out;
+  return false;
+}
+
+function mailup_getInfo_blocks(){
+  $sql = db_select('mailup_blocks', 'm')->fields('m');
+  $result = $sql->execute();
+  $out=array();
+  while($record = $result->fetchAssoc()) {
+    $out[]=$record;
+  }
+  if(count($out)) return $out;
+  return false;
+}
+
+function mailup_getInfo_blocks_byid($mailup_block_id){
+  $sql = db_select('mailup_blocks', 'm')->fields('m');
+  $sql->condition('mailup_block_id', $mailup_block_id);
+  $result = $sql->execute();
+  $out=array();
+  while($record = $result->fetchAssoc()) {
+    $out[]=$record;
+  }
+  if(count($out)) return $out;
+  return false;
+}
+
+function mailup_obj(){
+    try {
+        $mailup = new MailUp(
+            variable_get('mailup_username'),
+            variable_get('mailup_password'),
+            variable_get('mailup_console_url'),
+            variable_get('mailup_console_id'),
+            '',
+            true
+        );
+
+        return $mailup;
+    }
+    catch(Exception $x) {
+        drupal_set_message("Please upate the file\n" . __FILE__ . "\nto specify your access data (login, password, ...).\n\n", 'error');
+        //die(1);
+    }
+}
+
+function mailup_exec($action, $params=NULL){
+    //debug($action);
+    //debug($params);
+    $mailup=mailup_obj();
+    try {
+        if($params!=NULL) {
+            return $mailup->$action($params);
+        }else{
+            return $mailup->$action();
+        }
+    }
+    catch(Exception $x) {
+        drupal_set_message("ERROR!\n\n<pre>".print_r($x->getMessage(), true).'</pre>', 'error');
+        //die(1);
+    }
+}
+
+function mailup_getContent($nid){
+    $type=variable_get('mailup_mail_type');
+    //debug($type);
+    //debug($nid);
+    switch($type){
+        case 'node':
+            $content = mailup_getContent_node($nid);
+        break;
+        case 'body':
+            $content = mailup_getContent_body($nid);
+        break;
+        case 'url':
+            $content = mailup_getContent_url($nid);
+        break;
+    }
+
+    return $content;
+}
+
+function mailup_getContent_node($nid){
+    $node=node_load(array('nid' => $nid));
+    $html=node_view($node);
+    return drupal_render($html);
+}
+
+function mailup_getContent_body($nid){
+    $node=node_load(array('nid' => $nid));
+    $body =field_get_items('node', $node, 'body');
+    return $body[0]['value'];
+}
+
+function mailup_getContent_url($nid){
+    global $base_url;
+    return $base_url.'/node/'.$nid;
+}
+
+function mailup_getType(){
+    $type=variable_get('mailup_mail_type');
+
+    switch($type){
+        case 'node':
+            $content = 'HTML';
+        break;
+        case 'body':
+            $content = 'HTML';
+        break;
+        case 'url':
+            $content = 'URL';
+        break;
+    }
+
+    return $content;
+}
