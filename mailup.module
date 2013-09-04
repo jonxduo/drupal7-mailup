@@ -131,7 +131,7 @@ function mailup_config_form(){
 
     $form['mailup_mail_type'] = array(
         '#type' => 'select',
-        '#title' => t('Mail type'),
+        '#title' => t('Default Mail type'),
         '#default_value' => variable_get('mailup_mail_type'),
         '#description' => t('Mail type'),
         '#options'=>array(
@@ -283,6 +283,19 @@ function mailup_create_mail_form($form, &$form_state, $nid){
         '#required' => TRUE,
     );
 
+    $form['mailup_mail_type'] = array(
+        '#type' => 'select',
+        '#title' => t('Mail type'),
+        '#default_value' => variable_get('mailup_mail_type'),
+        '#description' => t('Mail type'),
+        '#options'=>array(
+            'node'=>'Rendered node',
+            'body'=>'Rendered also node body',
+            'url'=>'Node url'
+        ),
+        '#required' => TRUE,
+    );
+
     $form['mailup_nid'] = array(
         '#type' => 'hidden',
         '#default_value' => $nid
@@ -305,8 +318,8 @@ function mailup_create_mail_form_submit($form, &$form_state){
     $params=array(
         'listID' => variable_get('mailup_list_id'),
         'subject' => $form_state['input']['mailup_subject'],
-        'type' => mailup_getType(),
-        'content' => mailup_getContent($form_state['input']['mailup_nid']),
+        'type' => mailup_getType($form_state['input']['mailup_mail_type']),
+        'content' => mailup_getContent($form_state['input']['mailup_nid'], $form_state['input']['mailup_mail_type']),
         'options' => array()
     );
 
@@ -333,8 +346,8 @@ function mailup_update_mail_form_submit($form, &$form_state){
         'listID' => variable_get('mailup_list_id'),
         'newsletterID' => $form_state['input']['mailup_newsletter_id'],
         'subject' => $form_state['input']['mailup_subject'],
-        'type' => mailup_getType(),
-        'content' => mailup_getContent($form_state['input']['mailup_nid']),
+        'type' => mailup_getType($form_state['input']['mailup_mail_type']),
+        'content' => mailup_getContent($form_state['input']['mailup_nid'], $form_state['input']['mailup_mail_type']),
         'options' => array()
     );
 
@@ -575,8 +588,7 @@ function mailup_exec($action, $params=NULL){
     }
 }
 
-function mailup_getContent($nid){
-    $type=variable_get('mailup_mail_type');
+function mailup_getContent($nid, $type){
     //debug($type);
     //debug($nid);
     switch($type){
@@ -611,8 +623,7 @@ function mailup_getContent_url($nid){
     return $base_url.'/node/'.$nid;
 }
 
-function mailup_getType(){
-    $type=variable_get('mailup_mail_type');
+function mailup_getType($type){
 
     switch($type){
         case 'node':
